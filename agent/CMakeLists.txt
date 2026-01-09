@@ -15,20 +15,34 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+find_package(Threads REQUIRED)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/vendor/JSON)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/vendor/spdlog)
+
+if(UNIX)
+  file(GLOB linuxFile ${CMAKE_CURRENT_SOURCE_DIR}/src/Linux/*.cpp)
+endif()
+
 file(GLOB coreFile ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 
 add_executable(${PROJECT_NAME}
   ${coreFile}
+  ${linuxFile}
 )
 
 #target_precompile_headers(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include/repch.h)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/vendor/JSON/include
+  ${CMAKE_SOURCE_DIR}/vendor/spdlog/include
 )
 
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
+  Threads::Threads
+  nlohmann_json
+  spdlog
 )
 
 
