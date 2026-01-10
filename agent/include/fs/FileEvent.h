@@ -1,5 +1,5 @@
 #pragma once
-
+#include "Logger.h"
 #include <string>
 
 enum class FileEventType {
@@ -14,4 +14,5 @@ struct FileEvent {
   FileEventType type;
   std::string path;
   std::string oldPath;
+  bool isDirectory = false;
 };

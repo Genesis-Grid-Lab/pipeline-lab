@@ -2,6 +2,7 @@
 #include "Logger.h"
 #include "fs/FileEvent.h"
 
+#include <filesystem>
 #include <sys/inotify.h>
 #include <unistd.h>
 #include <limits.h>
@@ -10,6 +11,19 @@
 bool FileWatcherLinux::Start(const std::string &path, Callback callback) {
   if (m_running)
     return false;
+
+  if (!std::filesystem::exists(path)){
+    LOG_ERROR("Asset path {} does not exists", path);
+    return false;
+  }
+
+  m_fd = inotify_init1(IN_NONBLOCK);
+  if(m_fd < 0){
+    LOG_ERROR("Failed to init inotify");
+    return false;
+  }
+
+  watchRecursive(path);
 
   m_root = path;
   m_callback = callback;
@@ -33,23 +47,32 @@ void FileWatcherLinux::Stop(){
   LOG_INFO("FileWatcherLinux stopped");
 }
 
+void FileWatcherLinux::watchRecursive(const std::string &root) {
+  addWatch(root);
 
-void FileWatcherLinux::run() {
-  int fd = inotify_init1(IN_NONBLOCK);
-  if(fd < 0){
-    LOG_ERROR("inotify_init failed");
-    return;
+  for (auto &e : std::filesystem::recursive_directory_iterator(root)) {
+    if (e.is_directory()) {
+      addWatch(e.path().string());
+    }
   }
+}
 
-  int wd = inotify_add_watch(fd, m_root.c_str(),
-                             IN_CREATE | IN_MODIFY | IN_DELETE | IN_MOVED_FROM |
+void FileWatcherLinux::addWatch(const std::string& path){
+  int wd = inotify_add_watch(m_fd, path.c_str(),
+                             IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM |
                                  IN_MOVED_TO);
 
   if (wd < 0) {
-    LOG_ERROR("Failed to watch directory: {}", m_root);
-    close(fd);
+    LOG_ERROR("Failed to watch directory: {}", path);
+    perror("inotify_add_watch");
+    close(m_fd);
     return;
   }
+
+  m_watchToPath[wd] = path;
+}
+
+void FileWatcherLinux::run() {
 
   constexpr size_t BufferSize = 1024 * (sizeof(inotify_event) + NAME_MAX + 1);
 
@@ -57,7 +80,7 @@ void FileWatcherLinux::run() {
 
 
   while (m_running) {
-    int length = read(fd, buffer, BufferSize);
+    int length = read(m_fd, buffer, BufferSize);
     if (length <= 0) {
       usleep(10000);
       continue;
@@ -67,30 +90,68 @@ void FileWatcherLinux::run() {
     while (i < length){
       auto *event = reinterpret_cast<inotify_event *>(&buffer[i]);
 
-      if(event->len > 0){
-        FileEvent fe;
-        fe.path = m_root + "/" + event->name;
+      std::string base = m_watchToPath[event->wd];
+      std::string full = base + "/" + event->name;
 
-        if (event->mask & IN_CREATE)
-          fe.type = FileEventType::Added;
-        else if (event->mask & IN_MODIFY)
-          fe.type = FileEventType::Modified;
-        else if (event->mask & IN_DELETE)
-          fe.type = FileEventType::Removed;
-        else if (event->mask & IN_MOVED_FROM)
-          fe.type = FileEventType::Renamed;
-        else if (event->mask & IN_MOVED_TO)
-          fe.type = FileEventType::Added;
+      bool isDir = event->mask & IN_ISDIR;
 
-        if (m_callback)
-          m_callback(fe);
+      // --- RENAME (pairing) ---
+      if (event->mask & IN_MOVED_FROM)
+        m_pendingMoveFrom = full;
+      else if (event->mask & IN_MOVED_TO){
+	if(m_pendingMoveFrom){
+          emit({FileEventType::Renamed, full, *m_pendingMoveFrom, isDir});
 
+          if (isDir) {
+            removeWatchByPath(*m_pendingMoveFrom);
+	    addWatch(full);
+          }
+
+	  m_pendingMoveFrom.reset();
+	  
+	}
+      }
+
+      // --- CREATE ---
+      else if (event->mask & IN_CREATE) {
+        emit({FileEventType::Added, full, "", isDir});
+
+        if (isDir)
+	  addWatch(full);
+      }
+
+      // --- DELETE ---
+      else if (event->mask & IN_DELETE) {
+        emit({FileEventType::Removed, full, "", isDir});
+
+        if (isDir)
+	  removeWatchByPath(full);
+      }
+
+      // --- MODIFY ---
+      else if (event->mask & IN_MODIFY) {
+        emit({FileEventType::Modified, full, "", isDir});
       }
 
       i += sizeof(inotify_event) + event->len;
     }
   }
 
-  inotify_rm_watch(fd, wd);
-  close(fd);
+}
+
+void FileWatcherLinux::removeWatchByPath(const std::string &path) {
+
+  for (auto it = m_watchToPath.begin(); it != m_watchToPath.end(); ++it) {
+    if (it->second == path) {
+      inotify_rm_watch(m_fd, it->first);
+      m_watchToPath.erase(it);
+      break;
+    }
+  }
+}
+
+void FileWatcherLinux::emit(const FileEvent &e) {
+
+  if (m_callback)
+    m_callback(e);
 }

@@ -1,9 +1,7 @@
 #pragma once
-#include <atomic>
-#include <memory>
-#include <thread>
 #include "fs/FileWatcher.h"
 #include "assets/AssetIndex.h"
+#include "http/HttpServer.h"
 
 class Agent {
 public:
@@ -22,5 +20,8 @@ private:
   std::atomic<bool> m_running{false};
   std::thread m_thread;
   Scope<FileWatcher> m_watcher;
+  Scope<HttpServer> m_http;
   AssetIndex m_assets;
+  EventStream m_events;
+  
 };

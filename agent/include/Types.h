@@ -1,4 +1,9 @@
+#include <atomic>
 #include <memory>
+#include <thread>
+#include <mutex>
+#include <vector>
+#include <functional>
 
 //--------------------- Scope = unique pointer --------------------
 template<typename T>

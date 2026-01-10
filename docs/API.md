@@ -1,4 +1,4 @@
-# Pipeline-Lab – Agent API (Phase 0)
+# Pipeline-Lab – Agent API
 
 This document defines the **stable contract** between the Local DAM Agent (C++) and all clients (Web UI, Desktop UI).
 

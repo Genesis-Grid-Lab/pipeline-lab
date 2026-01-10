@@ -1,4 +1,5 @@
 #include "Agent.h"
+#include "http/HttpServer.h"
 #include <chrono>
 #include <thread>
 
@@ -14,11 +15,16 @@ bool Agent::Start() {
   m_running = true;
   m_thread = std::thread(&Agent::run, this);
 
+  m_http = CreateScope<HttpServer>(m_assets, m_events);
+  m_http->Start(4848);
+
   m_watcher = FileWatcher::Create();
 
+  m_assets.InitialScan("/home/nephilim/Assets");
+
   m_watcher->Start("/home/nephilim/Assets", [this](const FileEvent &e) {
- 
     m_assets.OnFileEvent(e);
+    m_events.Publish(e);
     // TODO:
     // notify API clients
   });
@@ -33,6 +39,9 @@ void Agent::Stop(){
     return;
 
   m_running = false;
+
+  if (m_http)
+    m_http->Stop();
 
   if (m_thread.joinable())
     m_thread.join();

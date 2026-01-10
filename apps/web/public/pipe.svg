@@ -1,0 +1,6 @@
+<svg viewBox="0 0 24 24" className="w-16 h-16 text-blue-300" fill="#2196f3" aria-hidden="true">
+                            <circle cx="6" cy="12" r="3" />
+                            <circle cx="12" cy="6" r="3" />
+                            <circle cx="12" cy="18" r="3" />
+                            <circle cx="18" cy="12" r="3" />
+                        </svg>

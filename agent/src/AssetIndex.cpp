@@ -1,6 +1,7 @@
 #include "assets/AssetIndex.h"
 #include "Logger.h"
 #include <bits/chrono.h>
+#include <cstdint>
 #include <filesystem>
 #include <chrono>
 
@@ -25,6 +26,21 @@ void AssetIndex::OnFileEvent(const FileEvent &e){
     addOrUpdate(e.path);    
     break;
   }
+}
+
+void AssetIndex::InitialScan(const std::string &root) {
+  namespace fs = std::filesystem;
+
+  LOG_INFO("Starting initial asset scan: {}", root);
+
+  for (auto &entry : fs::recursive_directory_iterator(root)) {
+    if (!entry.is_regular_file())
+      continue;
+
+    addOrUpdate(entry.path().string());
+  }
+
+  LOG_INFO("Initial scan complete ({} assets)", m_assets.size());
 }
 
 void AssetIndex::addOrUpdate(const std::string& path){
@@ -68,4 +84,15 @@ std::vector<Asset> AssetIndex::ListAssets() const {
     out.push_back(a);
 
   return out;
+}
+
+bool AssetIndex::GetAsset(const std::string &id, Asset &out) const {
+  std::lock_guard lock(m_mutex);
+  auto it = m_assets.find(id);
+  if (it == m_assets.end())
+    return false;
+
+  out = it->second;
+
+  return true;
 }

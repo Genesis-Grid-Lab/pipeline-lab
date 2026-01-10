@@ -4,7 +4,7 @@
 
 int main() {
   Log::Init();
-  LOG_INFO("Hello world!");
+  LOG_INFO("Log init");
   Agent agent;
   agent.Start();
 
